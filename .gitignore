@@ -1,0 +1,5 @@
+node_modules
+npm-debug.log
+Thumbs.db
+build/
+.node_pre_gyprc
