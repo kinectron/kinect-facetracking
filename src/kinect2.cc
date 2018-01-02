@@ -1,7 +1,8 @@
 // include <> looks elsewhere, usually in places pre-designated by the compiler/IDE
 #include <nan.h> // Header file from node for making native add on development easier (github.com/nodejs/nan)
 // it is included in the bindings.gyp file, pointing to the node lib install
-#include <iostream>
+//#include <iostream>
+#include <Windows.h>
 #include <uv.h>	// header file from libuv that implements the node event loop, threads, and asynch behavior
 // include "filename" looks in the same directory
 #include "Kinect.h" 	// C:\Program Files\Microsoft SDKs\Kinect\v2.0_1409\inc
