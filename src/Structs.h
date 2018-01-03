@@ -4,6 +4,9 @@
 #include "Globals.h"
 
 // I think I will need to add stuff here for the face
+// I think these are all just properties he came up with
+
+// Structures are just properties (basically just like an object, but no methods)
 
 typedef struct _JSJoint
 {
@@ -56,5 +59,36 @@ typedef struct _JSBodyFrame
 	float cosCameraAngle;
 	float sinCameraAngle;
 } JSBodyFrame;
+
+
+// ADDED face structures
+// do i need this one? below?....yes, so that I can identify the diff points?
+typedef struct _JSPointF	// pointF is analogous to joint, but on the face...do I need this
+{
+	float X;
+	float Y;
+} JSPointF;
+
+typedef struct _JSBoundBox
+{
+	float bottom;
+	float left;
+	float right;
+	float top;
+} JSBoundBox;
+
+typedef struct _JSFace
+{
+	bool tracked;
+	UINT64 trackingId;
+} JSFace;
+
+// ADDED faceframe structure
+typedef struct _JSFaceFrame
+{
+	JSFace faces[BODY_COUNT];
+} JSFaceFrame;
+
+
 
 #endif

@@ -1,8 +1,8 @@
 // include <> looks elsewhere, usually in places pre-designated by the compiler/IDE
 #include <nan.h> // Header file from node for making native add on development easier (github.com/nodejs/nan)
 // it is included in the bindings.gyp file, pointing to the node lib install
-//#include <iostream>
-#include <Windows.h>
+#include <iostream>
+#include <string>
 #include <uv.h>	// header file from libuv that implements the node event loop, threads, and asynch behavior
 // include "filename" looks in the same directory
 #include "Kinect.h" 	// C:\Program Files\Microsoft SDKs\Kinect\v2.0_1409\inc
@@ -12,9 +12,13 @@
 #include "Structs.h"
 
 using namespace v8;
+using namespace std;
 
 // This is all included in the FaceBasics.h file as a private fields/methods of the CFacesBasics class...
 // And then they are assigned "nullptr" in the FaceBasics.cpp constructor function (52-65)
+
+// Anything that starts with I is from the Kinect Interface SDK
+// https://msdn.microsoft.com/en-us/library/dn758674.aspx
 IKinectSensor*						m_pKinectSensor = NULL;	// Current Kinect
 ICoordinateMapper*					m_pCoordinateMapper = NULL;	// Coordinate mapper
 IColorFrameReader*  				m_pColorFrameReader = NULL;	// Color reader
@@ -23,13 +27,7 @@ ILongExposureInfraredFrameReader* 	m_pLongExposureInfraredFrameReader = NULL;
 IDepthFrameReader*					m_pDepthFrameReader = NULL;
 IBodyFrameReader*					m_pBodyFrameReader = NULL;	//Body reader
 IMultiSourceFrameReader*			m_pMultiSourceFrameReader = NULL;
-// Added face reader from the FaceBasics.h file
-//IFaceFrameReader*					m_pFaceFrameReaders[BODY_COUNT] = NULL;	// Face readers
-// Body count is declared in the Kinect.h file
-
-// Face Frame Source should show up elsewhere?
-//IFaceFrameSource*					m_pFaceFrameSources[BODY_COUNT] = NULL;	// Face sources
-
+IFaceFrameReader*					m_pFaceFrameReader = NULL;	// Face reader
 
 RGBQUAD*							m_pColorPixels = new RGBQUAD[cColorWidth * cColorHeight];
 RGBQUAD*							m_pColorPixelsV8 = new RGBQUAD[cColorWidth * cColorHeight];
@@ -52,6 +50,8 @@ RGBQUAD								m_pBodyIndexColorPixelsV8[BODY_COUNT][cColorWidth * cColorHeight]
 JSBodyFrame							m_jsBodyFrame;
 JSBodyFrame							m_jsBodyFrameV8;
 // NEED TO make frames for FACE DATA
+JSFaceFrame							m_jsFaceFrame;
+JSFaceFrame							m_jsFaceFrameV8;
 
 DepthSpacePoint*				m_pDepthCoordinatesForColor = new DepthSpacePoint[cColorWidth * cColorHeight];
 ColorSpacePoint*				m_pColorCoordinatesForDepth = new ColorSpacePoint[cDepthWidth * cDepthHeight];
@@ -68,6 +68,7 @@ Nan::Callback*					m_pLongExposureInfraredReaderCallback;
 Nan::Callback*					m_pDepthReaderCallback;
 Nan::Callback*					m_pRawDepthReaderCallback;
 Nan::Callback*					m_pBodyReaderCallback;
+Nan::Callback*					m_pFaceReaderCallback;	// Added callback for face reader
 Nan::Callback*					m_pMultiSourceReaderCallback;
 
 uv_mutex_t						m_mColorReaderMutex;
@@ -76,6 +77,7 @@ uv_mutex_t						m_mLongExposureInfraredReaderMutex;
 uv_mutex_t						m_mDepthReaderMutex;
 uv_mutex_t						m_mRawDepthReaderMutex;
 uv_mutex_t						m_mBodyReaderMutex;
+uv_mutex_t 						m_mFaceReaderMutex;		// Added face mutex
 uv_mutex_t						m_mMultiSourceReaderMutex;
 
 uv_async_t						m_aColorAsync;
@@ -133,6 +135,11 @@ uv_async_t						m_aBodyAsync;
 uv_thread_t						m_tBodyThread;
 bool 							m_bBodyThreadRunning = false;
 
+// ADDED face threading
+uv_async_t						m_aFaceAsync;
+uv_thread_t						m_tFaceThread;
+bool 							m_bFaceThreadRunning = false;
+
 uv_async_t						m_aMultiSourceAsync;
 uv_thread_t						m_tMultiSourceThread;
 bool 							m_bMultiSourceThreadRunning = false;
@@ -141,7 +148,7 @@ Nan::Persistent<Object>			m_persistentBodyIndexColorPixels;
 bool 							m_includeJointFloorData = false;
 
 // INITIATE THE KINECT SENSOR
-// THIS corresponds to lines 273 - 345 of the FaceBasics.cpp
+// THIS corresponds to lines 273 - 345 of the FaceBasics.cpp - but only initiates the coordinate mapper
 // NAN_METHOD is a Nan macro for creative native node functions
 NAN_METHOD(OpenFunction)
 {
@@ -174,6 +181,7 @@ NAN_METHOD(OpenFunction)
 	{
 		info.GetReturnValue().Set(false);
 	}
+	//cout << "hello!";
 	info.GetReturnValue().Set(true);
 }
 
@@ -1038,11 +1046,288 @@ NAN_METHOD(CloseRawDepthReaderFunction)
 
 
 
+
+
+//////////////////////////////////////////////////
+////// ADDED FACE METHODS AND FUNCTIONS //////////
+//////////////////////////////////////////////////
+
+// the FaceFrame function will return a v8 javascript object
+v8::Local<v8::Object> getV8FaceFrame_()
+{
+	Nan::EscapableHandleScope scope;	// set the scope to escapable type
+	v8::Local<v8::Object> v8FaceResult = Nan::New<v8::Object>(); // create empty object for all faces - this is what will be returned
+
+	//array of all faces, length equal to the number of bodies
+	v8::Local<v8::Array> v8faces = Nan::New<v8::Array>(BODY_COUNT);
+
+	for(int i = 0; i < BODY_COUNT; i++)
+	{
+		//create a face object
+		v8::Local<v8::Object> v8face = Nan::New<v8::Object>();
+
+		//set up some parameters 
+		Nan::Set(v8face, Nan::New<String>("faceIndex").ToLocalChecked(), Nan::New<v8::Number>(i)); // assign loop number to be the index
+
+		Nan::Set(v8face, Nan::New<v8::String>("tracked").ToLocalChecked(), Nan::New<v8::Boolean>(m_jsFaceFrameV8.faces[i].tracked)); // is this face being tracked?
+
+		if(m_jsFaceFrameV8.faces[i].tracked)
+		{
+			Nan::Set(v8face, Nan::New<v8::String>("trackingId").ToLocalChecked(), Nan::New<v8::String>(std::to_string(m_jsFaceFrameV8.faces[i].trackingId)).ToLocalChecked());
+			// assign trackingID to the face object
+		}
+		Nan::Set(v8faces, i, v8face); // add face to faces array
+	}
+	// set faces to the result for returning
+	Nan::Set(v8FaceResult, Nan::New<v8::String>("faces").ToLocalChecked(), v8faces);
+
+	return scope.Escape(v8FaceResult);
+}
+
+NAUV_WORK_CB(FaceProgress_) 	// this is the callback called from the libuv async handle
+{
+	Nan::HandleScope scope;
+	uv_mutex_lock(&m_mFaceReaderMutex);
+	if(m_pFaceReaderCallback != NULL)
+	{
+		v8::Local<v8::Object> v8FaceResult = getV8FaceFrame_();
+
+		v8::Local<v8::Value> argv[] = {
+			v8FaceResult
+		};
+		m_pFaceReaderCallback->Call(1, argv);
+	}
+	uv_mutex_unlock(&m_mFaceReaderMutex);
+}
+
+// For this, can reference a bit FaceBasics.cpp to see the available properties etc
+// This will assign all the data to the v8 objects to its exposed in javasctrip
+// Also this https://msdn.microsoft.com/en-us/library/dn782034.aspx#ID4E3B
+// And this https://msdn.microsoft.com/en-us/library/microsoft.kinect.face.ifaceframeresult.aspx
+HRESULT processFaceFrameData(IFaceFrame* pFaceFrame)
+{
+
+	// For the body frame, the interface was IBody as the body frame result
+	// For this, I think they changed the nomenclature and sured "IFaceFrameResult"
+	// Unsure about this....
+	// Do I need to do body tracking before starting the face stuff...
+	// Because how am I getting the face for each body....
+	//IFaceFrameResult* ppFaces[BODY_COUNT] = {0};
+	IBody* ppBodies[BODY_COUNT] = {0};
+
+	// For now let's just assume once face....
+	// but need to make a for loop
+	HRESULT hr;
+	BOOLEAN bFaceTracked = false;
+	hr = pFaceFrame->get_IsTrackingIdValid(&bFaceTracked);
+
+	m_jsFaceFrame.faces[0].tracked = bFaceTracked;
+
+	IFaceFrameResult* pFaceFrameResult = NULL;
+
+	if (SUCCEEDED(hr))
+	{
+		if (bFaceTracked)
+		{
+			
+			hr = pFaceFrame->get_FaceFrameResult(&pFaceFrameResult);
+			// tracking id
+			UINT64 iTrackingId = 0;
+			hr = pFaceFrameResult->get_TrackingId(&iTrackingId);
+			m_jsFaceFrame.faces[0].trackingId = iTrackingId;
+
+			// bounding box
+			//RectI faceBox = {0};
+			//pFaceFrameResult->get_FaceBoundingBoxInColorSpace(&faceBox);
+			//m_jsFaceFrame.faces[0].boundBox = faceBox;
+
+			//PointF facePoints[FacePointType::FacePointType_Count];	// unsure about the syntax
+		}
+		else
+		{
+			m_jsFaceFrame.faces[0].trackingId = 0;
+		}
+	}
+
+
+	SafeRelease(pFaceFrameResult);
+	return hr;
+}
+
+// this is called when the thread is created, and is the entry point for the thread
+// Once we have the face frame source, we start reading it...
+void FaceReaderThreadLoop(void *arg)
+{
+	while(1)
+	{
+		// IFaceFrame is the Kinect interface frame with all the face frame points
+		IFaceFrame* pFaceFrame = NULL;
+		HRESULT hr;
+
+		//lock the mutex to get access to the frame reader
+		uv_mutex_lock(&m_mFaceReaderMutex);
+		if(!m_bFaceThreadRunning)
+		{
+			uv_mutex_unlock(&m_mFaceReaderMutex);
+			break;
+		}
+		// get the most recent face frame
+		hr = m_pFaceFrameReader->AcquireLatestFrame(&pFaceFrame);
+		// unlock the mutex so protected data is availble in other threads
+		uv_mutex_unlock(&m_mFaceReaderMutex);
+
+		if(SUCCEEDED(hr))
+		{
+			// custome function to process the face frame
+			hr = processFaceFrameData(pFaceFrame);
+			if (SUCCEEDED(hr))
+			{
+				//we have everything ready for our main loop, lock the mutex & copy the data to global memory
+				uv_mutex_lock(&m_mFaceReaderMutex);
+				//copy into object for V8
+				memcpy(&m_jsFaceFrameV8, &m_jsFaceFrame, sizeof(JSFaceFrame));
+				//unlock the mutex again
+				uv_mutex_unlock(&m_mFaceReaderMutex);
+				//notify event loop
+				uv_async_send(&m_aFaceAsync);
+			}
+		}
+		SafeRelease(pFaceFrame);
+	}
+}
+
+
+
+NAN_METHOD(OpenFaceReaderFunction)
+{
+
+	uv_mutex_lock(&m_mFaceReaderMutex);
+
+	if(m_pFaceReaderCallback)
+	{
+		delete m_pFaceReaderCallback;
+		m_pFaceReaderCallback = NULL;
+	}
+
+	m_pFaceReaderCallback = new Nan::Callback(info[0].As<Function>());
+
+	HRESULT hr;
+	
+	// // Face tracking is a conglometate of/inferred from body data and color data
+	// // for body tracking, you can get the data as an immediate source from the sensor
+	// // But face frame sources have to be constructed
+	// //https://msdn.microsoft.com/en-us/library/microsoft.kinect.face.createfaceframesource.aspx
+	// //https://msdn.microsoft.com/en-us/library/microsoft.kinect.face.ifaceframereader.get_faceframesource.aspx
+
+	// // QUESTION - DO I NEED TO BE DOING STUFF WITH MULTITREADING.....
+
+	// // Declare the frame sources
+	IColorFrameSource* pColorFrameSource = NULL;
+    IBodyFrameSource* pBodyFrameSource = NULL;
+
+	IFaceFrameSource* pFaceFrameSource = nullptr;
+
+	// Set what the face features we want to track are
+	static const DWORD c_FaceFrameFeatures = 
+    FaceFrameFeatures::FaceFrameFeatures_BoundingBoxInColorSpace
+    | FaceFrameFeatures::FaceFrameFeatures_PointsInColorSpace;
+    // | FaceFrameFeatures::FaceFrameFeatures_RotationOrientation
+    // | FaceFrameFeatures::FaceFrameFeatures_Happy
+    // | FaceFrameFeatures::FaceFrameFeatures_RightEyeClosed
+    // | FaceFrameFeatures::FaceFrameFeatures_LeftEyeClosed
+    // | FaceFrameFeatures::FaceFrameFeatures_MouthOpen
+    // | FaceFrameFeatures::FaceFrameFeatures_MouthMoved
+    // | FaceFrameFeatures::FaceFrameFeatures_LookingAway
+    // | FaceFrameFeatures::FaceFrameFeatures_Glasses
+    // | FaceFrameFeatures::FaceFrameFeatures_FaceEngagement;
+    //static const DWORD c_FaceFrameFeatures = 0;
+
+	hr = m_pKinectSensor->get_ColorFrameSource(&pColorFrameSource);
+    if (SUCCEEDED(hr))
+    {
+        hr = pColorFrameSource->OpenReader(&m_pColorFrameReader);
+    }
+
+    if (SUCCEEDED(hr))
+    {
+        hr = m_pKinectSensor->get_BodyFrameSource(&pBodyFrameSource);
+    }
+    if (SUCCEEDED(hr))
+    {
+        hr = pBodyFrameSource->OpenReader(&m_pBodyFrameReader);
+    }
+
+    // now we can construct the face frame source
+    if (SUCCEEDED(hr))
+    {
+    	ofstream log;
+    	log.open("log.txt");
+    	log << "hi!";
+    	log.close();
+    	std::cout "hi from std";
+    	//cout << "hi!";
+
+    	// arguments for creating: (what sensor, initial tracking ID, features to detect, assign to the source)
+    	hr = CreateFaceFrameSource(m_pKinectSensor, 0, c_FaceFrameFeatures, &pFaceFrameSource);
+    	// THIS IS WHAT I HAD BEFORE....
+		//hr = m_pKinectSensor->get_FaceFrameSource(&pFaceFrameSource);
+
+		cout << hr;
+    }
+
+info.GetReturnValue().Set(true);
+	// if (SUCCEEDED(hr))
+	// {
+	// 	// open the face reader on the source
+	// 	hr = pFaceFrameSource->OpenReader(&m_pFaceFrameReader);
+	// }
+
+
+
+	// if (SUCCEEDED(hr))
+	// {
+	// 	// set the thread to true
+	// 	m_bFaceThreadRunning = true;
+	// 	// make use of asynchronous threading
+	// 	// Immediately start the async handle, to "wakeup" the event loop
+	// 	// Get the FaceProgress_ callback (from another thread?)
+	// 	uv_async_init(uv_default_loop(), &m_aFaceAsync, FaceProgress_);
+	// 	// create a thread, arguments are (threadID, entry point for the thread, custom params to the thread)
+	// 	uv_thread_create(&m_tFaceThread, FaceReaderThreadLoop, NULL);
+	// }
+
+	// // release the sources
+	// SafeRelease(pColorFrameSource);
+ //    SafeRelease(pBodyFrameSource);
+	// SafeRelease(pFaceFrameSource);
+
+	// // unlock the thread so that the protected data can be used
+	// uv_mutex_unlock(&m_mFaceReaderMutex);
+	// if (SUCCEEDED(hr))
+	// {
+	// 	info.GetReturnValue().Set(true);
+	// }
+	// else
+	// {
+	// 	info.GetReturnValue().Set(false);
+	// }
+}
+
+NAN_METHOD(CloseFaceReaderFunction)
+{
+	stopReader(&m_mFaceReaderMutex, &m_bFaceThreadRunning, &m_tFaceThread, (uv_handle_t*) &m_aFaceAsync, m_pFaceFrameReader);
+	info.GetReturnValue().Set(true);
+}
+
+
 /////// THIS EXPOSES THE BODY DATA TO NODE/JAVASCRIPT USING v8
+// this is creating a function called "getV8BodyFrame_" that returns a local object
+// The local object is escapable (last line) so you can pass one value to another
+// it is called from BodyProgress (a callback once the async thread is initialized)
 v8::Local<v8::Object> getV8BodyFrame_()
 {
-	Nan::EscapableHandleScope scope;
-	v8::Local<v8::Object> v8BodyResult = Nan::New<v8::Object>();
+	Nan::EscapableHandleScope scope;	// set the scope to escapable type
+	v8::Local<v8::Object> v8BodyResult = Nan::New<v8::Object>(); // create empty object for all bodies - this is what will be returned
 
 	//bodies
 	v8::Local<v8::Array> v8bodies = Nan::New<v8::Array>(BODY_COUNT);
@@ -1122,7 +1407,7 @@ float getJointDistanceFromFloor_(Vector4 floorClipPlane, Joint joint, float came
 }
 
 /////// BODY FUNCTIONS
-NAUV_WORK_CB(BodyProgress_)
+NAUV_WORK_CB(BodyProgress_) 	// this is the callback called from the libuv async handle
 {
 	Nan::HandleScope scope;
 	uv_mutex_lock(&m_mBodyReaderMutex);
@@ -1269,8 +1554,9 @@ void BodyReaderThreadLoop(void *arg)
 {
 	while(1)
 	{
-
+		// IBodyFrame is the Kinect interface frame with all the computed real-time tracking information about people that are in view of the sensor
 		IBodyFrame* pBodyFrame = NULL;
+
 		HRESULT hr;
 
 		//lock the mutex to get access to the frame reader
@@ -1921,6 +2207,9 @@ NAN_MODULE_INIT(Init)
 	//body
 	uv_mutex_init(&m_mBodyReaderMutex);
 
+	//face
+	uv_mutex_init(&m_mFaceReaderMutex);
+
 	//multisource
 	uv_mutex_init(&m_mMultiSourceReaderMutex);
 
@@ -1963,6 +2252,13 @@ NAN_MODULE_INIT(Init)
 		Nan::New<FunctionTemplate>(OpenBodyReaderFunction)->GetFunction());
 	Nan::Set(target, Nan::New<String>("closeBodyReader").ToLocalChecked(),
 		Nan::New<FunctionTemplate>(CloseBodyReaderFunction)->GetFunction());
+
+	// Added mapping for face reader
+	Nan::Set(target, Nan::New<String>("openFaceReader").ToLocalChecked(),
+		Nan::New<FunctionTemplate>(OpenFaceReaderFunction)->GetFunction());
+	Nan::Set(target, Nan::New<String>("closeFaceReader").ToLocalChecked(),
+		Nan::New<FunctionTemplate>(CloseFaceReaderFunction)->GetFunction());
+
 	Nan::Set(target, Nan::New<String>("openMultiSourceReader").ToLocalChecked(),
 		Nan::New<FunctionTemplate>(OpenMultiSourceReaderFunction)->GetFunction());
 	Nan::Set(target, Nan::New<String>("closeMultiSourceReader").ToLocalChecked(),

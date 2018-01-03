@@ -9,10 +9,10 @@
       ],
       "conditions" : [
       	["target_arch=='ia32'", {
-         "libraries": [ "-l$(KINECTSDK20_DIR)\\lib\\x86\\kinect20.lib" ]
+         "libraries": [ "-l$(KINECTSDK20_DIR)\\lib\\x86\\kinect20.lib","-l$(KINECTSDK20_DIR)\\lib\\x86\\Kinect20.Face.lib" ]
         }],
         ["target_arch=='x64'", {
-          "libraries": [ "-l$(KINECTSDK20_DIR)\\lib\\x64\\kinect20.lib" ]
+          "libraries": [ "-l$(KINECTSDK20_DIR)\\lib\\x64\\kinect20.lib","-l$(KINECTSDK20_DIR)\\lib\\x64\\Kinect20.Face.lib" ]
         }]
       ]
     },
