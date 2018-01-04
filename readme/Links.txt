@@ -1,0 +1,37 @@
+HOW TO GET KINECT FACE TRACKING UP AND RUNNING
+
+example is written in c++ VC6
+for it to be accessible by node native, needs to be in c++ V8
+and need to write a binding file
+
+
+https://github.com/bcoe/awesome-cross-platform-nodejs
+https://github.com/Microsoft/nodejs-guidelines/blob/master/windows-environment.md#editors-and-ides
+
+GETTING STARTED WITH NODE AND C++
+https://github.com/Microsoft/nodejs-guidelines/blob/master/windows-environment.md
+
+COMPLILING AND WRITING NATIVE ADDON MODULES
+https://github.com/Microsoft/nodejs-guidelines/blob/master/windows-environment.md#compiling-native-addon-modules
+
+https://blog.risingstack.com/writing-native-node-js-modules/
+
+
+NODE-GYP
+https://github.com/nodejs/node-gyp/issues/629
+
+
+TUTORIAL
+learning how to write node.js native addons
+https://github.com/workshopper/goingnative
+https://hackernoon.com/n-api-and-getting-started-with-writing-c-addons-for-node-js-cf061b3eae75
+http://stackabuse.com/how-to-create-c-cpp-addons-in-node/
+https://code.tutsplus.com/tutorials/writing-nodejs-addons--cms-21771
+
+EXAMPLES
+https://github.com/nodejs/node-addon-examples
+
+IS THIS THE EBOOK?
+https://nodeaddons.com/getting-your-c-to-the-web-with-node-js/
+https://nodeaddons.com/book/
+

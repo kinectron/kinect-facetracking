@@ -1,0 +1,119 @@
+{\rtf1\ansi\ansicpg1252\cocoartf1561\cocoasubrtf200
+{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;\red217\green11\blue5;}
+{\*\expandedcolortbl;;\cssrgb\c88946\c14202\c0;}
+\margl1440\margr1440\vieww14400\viewh15100\viewkind0
+\pard\tx566\tx1133\tx1700\tx2267\tx2834\tx3401\tx3968\tx4535\tx5102\tx5669\tx6236\tx6803\sl312\slmult1\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 LEARNING C++ THINGS\
+What is the .h file versus the .cc file?\
+.h is a header file\
+it contains function prototypes.ie int square(int)\
+\
+.cc is an implementation file\
+ie \
+#include "myLib.h"\
+int square(int x)\
+\{\
+	return x*x;\
+\}\
+\
+What is a .dll or .so file?\
+It's a compiled implementation which allows libraries to be distributed. Then just the header file containing the prototypes just needs to be included, which will reference the .dll\
+dynamically linked library\
+\
+\
+What is a binding file?\
+The binding file is used by node-gyp to create build files for the add-on.\
+Within the blinding tile, the target_name is anything you want to use to identify the add-on. The sources array contains all the code required for compiling the add-on.\
+\pard\tx566\tx1133\tx1700\tx2267\tx2834\tx3401\tx3968\tx4535\tx5102\tx5669\tx6236\tx6803\sl312\slmult1\pardirnatural\partightenfactor0
+\cf0 \
+\
+\
+\
+MY PROCESS.\
+\
+1. Install Python 2.7xxx\
+2. Install node (http://blog.teamtreehouse.com/install-node-js-npm-windows)\
+3. Install visual studio 2013 (this is what i needed to run the Kinect SDK examples)\
+\
+1. Open Visual Studio 2013\
+2. Open the "FaceBasics-D2D" example. You can run this by plugging in the kinect and then run "Debug > Start Debug". Position the kinect in a place where it can see most of your body, otherwise it will not detect you.\
+2b. I started by trying to understand the Kinect SDK example (which was a really bad place to start since it\'92s complicated C++ code. Spent too long trying to understand this and C++ in general)\
+\
+3. Analyzed the Kinect 2 source code: https://github.com/wouterverweirder/kinect2\
+- For each type of data, there are a set of methods and functions\
+	- NAUV_WORK_CB(Progress)\
+		- Sets up the thread buffer\
+	- HRESULT process Data Function(argument)\
+		- Where we do any modification / conversion / analysis of data from the readers\
+	- void Thread Loop Function(argument)\
+		- This has to do with threading and memory management (need to read the Node/C++ book)\
+		- Passing into the buffer for V8\
+	- NAN_METHOD(Open Reader)\
+		- NAN_METHOD is a Nan macro for creating native node functions\
+		- This is where the relevant frames and readers are got (in FaceBasics, this is all in lines 286 - 332)\
+	- NAN_METHOD(Close Reader)\
+- Exposing skeleton data from C++ to javascript are lines 1037 - 1091 (getV8BodyFrame)\
+- The body has a data structure (see Structs.h - body frame, body and joint) which corresponds to data made available from Kinect.h\
+	- Will need to make a similar structure for face data\
+\
+4. Built his add-on, to understand the process (not difficult, but still read lots of tutorials\'85 )\
+	- ran \'93npm run install\'94 first - which is fine, because it builds from remote\'85.\
+	- but i get errors when doing \'93npm run buildall\'94\'85\
+	- had to npm install windows-build-tools package as I\'92m working on a windows machine\
+\
+I CAN\'92T GET HIS LIBRARY TO COMPILE\'85\
+	- soooo when I added \'93compile: node-pre-gyp rebuild\'94 to the scripts in package.json, I was able to get it to compile! wahoo!\
+	- *\cf2 but, given that I can\'92t build, I must be missing something? Because how can we then build it for the electron app?\cf0 \
+\
+5. Example is up and running with custom compiled module\
+	- Let\'92s see if we can get an example up and running!\
+	- was able to run \'93node basicexample.js\'94 and have it send back body data.\
+\
+6. I also made a really dumb add on (using this example: https://medium.com/@marcinbaraniecki/extending-node-js-with-native-c-modules-63294a91ce4) just to understand a few more things about nan\
+	- npm init -y creates the \'93package.json\'94 file\
+	- any time you install dependencies, add - - save to the end of the command and it will be added to the package.json\
+\
+7. Use the Microsoft Kinect C++ Reference to identity and incorporate relevant interfaces, structures, etc\
+	Interfaces: https://msdn.microsoft.com/en-us/library/dn758674.aspx\
+	Structures: https://msdn.microsoft.com/en-us/library/dn758676.aspx\
+\
+Needed to add the director for the face library to the bindings file - this finally allowed us to compile!!!\
+\
+IMMEDIATE QUESTION\
+- how to add the Face.dll to the c++ add-on (LoadLibrary)\
+- What is the Kinect2.FrameType stuff - why is it 0s and xs - do I need to add a frame type?\
+\
+NEXT STEPS:\
+- need to read through the kinect api more to find the parallel body/face stuff\
+\pard\tx566\tx1133\tx1700\tx2267\tx2834\tx3401\tx3968\tx4535\tx5102\tx5669\tx6236\tx6803\sl312\slmult1\pardirnatural\partightenfactor0
+\cf0 - add the c++/v8 stuff to the module\
+	1. needed to create a face frame source as its combined from body and color sources (wondering if I need to multithread?)\
+		- you have to set what the face features are that you want to track\
+	2. added database file to bindings.gyp because face tracking requires it\
+		- STUCK HERE\
+\
+	- add face frame structures to structs.h (not totally sure what things to add\'85think it\'92s all custom)\
+	- I think its the IFaceFrameResult is the \'93equivalent\'94 of IBody\
+\
+\'85I think I might need to see if there are bodies before doing face tracking\'85\
+\
+\pard\tx566\tx1133\tx1700\tx2267\tx2834\tx3401\tx3968\tx4535\tx5102\tx5669\tx6236\tx6803\sl312\slmult1\pardirnatural\partightenfactor0
+\cf0 - add face readers and face callbacks to js library (done as comments)\
+\
+\
+\
+\
+\
+\
+dynamic arrays are called vectors\
+avoid pointers unless needed\
+\
+Variables into Functions\
+- can pass by value or by reference\
+- passing by value = int a\
+- passing by reference = int &a (which will modify the original variable)\
+- because functions can only return one value, you can pass in output variables BY REFERENCE into the function to overcome this\
+\
+}
