@@ -1228,6 +1228,7 @@ NAN_METHOD(OpenFaceReaderFunction)
 	IFaceFrameSource* pFaceFrameSource = nullptr;
 
 	// Set what the face features we want to track are
+	// LOOK UP WHAT THE PIPE | IS IN C++ - binary or?
 	static const DWORD c_FaceFrameFeatures = 
     FaceFrameFeatures::FaceFrameFeatures_BoundingBoxInColorSpace
     | FaceFrameFeatures::FaceFrameFeatures_PointsInColorSpace;
@@ -1260,19 +1261,16 @@ NAN_METHOD(OpenFaceReaderFunction)
     // now we can construct the face frame source
     if (SUCCEEDED(hr))
     {
-    	ofstream log;
-    	log.open("log.txt");
-    	log << "hi!";
-    	log.close();
-    	std::cout "hi from std";
+    	std::cout << "hi from std\n";
     	//cout << "hi!";
 
     	// arguments for creating: (what sensor, initial tracking ID, features to detect, assign to the source)
-    	hr = CreateFaceFrameSource(m_pKinectSensor, 0, c_FaceFrameFeatures, &pFaceFrameSource);
+    	// run a bunch of consoles on this, so that I can see what each of them are
+    	// compare with consoling from the visual studio code and see if its the same
+    	std::cout << c_FaceFrameFeatures;
+    	//hr = CreateFaceFrameSource(m_pKinectSensor, 0, c_FaceFrameFeatures, &pFaceFrameSource);
     	// THIS IS WHAT I HAD BEFORE....
 		//hr = m_pKinectSensor->get_FaceFrameSource(&pFaceFrameSource);
-
-		cout << hr;
     }
 
 info.GetReturnValue().Set(true);
