@@ -1,0 +1,16 @@
+{
+  "name": "node-hello-example",
+  "version": "1.0.0",
+  "description": "Simple example. The package JSON file includes the dependencies and points to scripts for building and compiling.",
+  "main": "index.js",
+  "dependencies": {
+    "nan": "^2.8.0",
+    "node-gyp": "^3.6.2",
+    "node-pre-gyp": "^0.6.39"
+  },
+  "scripts": {
+    "compile": "node-gyp rebuild",
+    "start": "node sayhello.js"
+  },
+  "gypfile": true
+}

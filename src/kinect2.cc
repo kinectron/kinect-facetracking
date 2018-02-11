@@ -1,29 +1,27 @@
-// include <> looks elsewhere, usually in places pre-designated by the compiler/IDE
-#include <nan.h> // Header file from node for making native add on development easier (github.com/nodejs/nan)
+// include <> looks elsewhere
+#include <nan.h> // Header file from node for making native add on development 					easier (github.com/nodejs/nan)
 // it is included in the bindings.gyp file, pointing to the node lib install
-#include <iostream>
-#include <string>
-#include <uv.h>	// header file from libuv that implements the node event loop, threads, and asynch behavior
+#include <iostream>	//this allows us to console log things
+#include <string> 	//this allows us to console log things
+#include <uv.h>		// header file from libuv that implements the node event 					loop, threads, and asynch behavior
 // include "filename" looks in the same directory
-#include "Kinect.h" 	// C:\Program Files\Microsoft SDKs\Kinect\v2.0_1409\inc
-#include "Kinect.Face.h"	// But how does my program know that these are there? For now...just copied them?
-// ^ they are included in the bindings.gyp file, pointing to Kinect SDK
-#include "Globals.h"
+#include "Kinect.h"
+#include "Kinect.Face.h" 	// Paths to these are provided in the bindings.gyp file, pointing to Kinect SDK
+#include "Globals.h"	// These are local
 #include "Structs.h"
 
 using namespace v8;
 using namespace std;
 
-// This is all included in the FaceBasics.h file as a private fields/methods of the CFacesBasics class...
-// And then they are assigned "nullptr" in the FaceBasics.cpp constructor function (52-65)
+
 
 // Anything that starts with I is from the Kinect Interface SDK
 // https://msdn.microsoft.com/en-us/library/dn758674.aspx
 IKinectSensor*						m_pKinectSensor = NULL;	// Current Kinect
 ICoordinateMapper*					m_pCoordinateMapper = NULL;	// Coordinate mapper
 IColorFrameReader*  				m_pColorFrameReader = NULL;	// Color reader
-IInfraredFrameReader* 				m_pInfraredFrameReader = NULL;	
-ILongExposureInfraredFrameReader* 	m_pLongExposureInfraredFrameReader = NULL;	
+IInfraredFrameReader* 				m_pInfraredFrameReader = NULL;
+ILongExposureInfraredFrameReader* 	m_pLongExposureInfraredFrameReader = NULL;
 IDepthFrameReader*					m_pDepthFrameReader = NULL;
 IBodyFrameReader*					m_pBodyFrameReader = NULL;	//Body reader
 IMultiSourceFrameReader*			m_pMultiSourceFrameReader = NULL;
@@ -158,7 +156,7 @@ NAN_METHOD(OpenFunction)
 	{
 		// info is a macro's "implicit" parameter - it's a bridge between C++ and Javascript
 		// it is uset to both extra function parameters and set values
-		// this is kind of like a bridge for returning into
+		// this is kind of like a bridge for returning info
 		info.GetReturnValue().Set(false);
 	}
 
@@ -212,6 +210,7 @@ NAN_METHOD(CloseFunction)
 
 	// NEED TO add line for stopping face reader?
 	// stopReader(&m_m_pFaceFrameReaders)
+	// stopReader(&m_mFaceReaderMutex, &m_bFaceThreadRunning, &m_tFaceThread, (uv_handle_t*) &m_aFaceAsync, m_pFace-FrameReader);
 
 	// done with coordinate mapper
 	SafeRelease(m_pCoordinateMapper);
@@ -1066,7 +1065,7 @@ v8::Local<v8::Object> getV8FaceFrame_()
 		//create a face object
 		v8::Local<v8::Object> v8face = Nan::New<v8::Object>();
 
-		//set up some parameters 
+		//set up some parameters
 		Nan::Set(v8face, Nan::New<String>("faceIndex").ToLocalChecked(), Nan::New<v8::Number>(i)); // assign loop number to be the index
 
 		Nan::Set(v8face, Nan::New<v8::String>("tracked").ToLocalChecked(), Nan::New<v8::Boolean>(m_jsFaceFrameV8.faces[i].tracked)); // is this face being tracked?
@@ -1084,7 +1083,8 @@ v8::Local<v8::Object> getV8FaceFrame_()
 	return scope.Escape(v8FaceResult);
 }
 
-NAUV_WORK_CB(FaceProgress_) 	// this is the callback called from the libuv async handle
+// this is the callback called from the libuv async handle
+NAUV_WORK_CB(FaceProgress_)
 {
 	Nan::HandleScope scope;
 	uv_mutex_lock(&m_mFaceReaderMutex);
@@ -1107,12 +1107,7 @@ NAUV_WORK_CB(FaceProgress_) 	// this is the callback called from the libuv async
 HRESULT processFaceFrameData(IFaceFrame* pFaceFrame)
 {
 
-	// For the body frame, the interface was IBody as the body frame result
-	// For this, I think they changed the nomenclature and sured "IFaceFrameResult"
-	// Unsure about this....
-	// Do I need to do body tracking before starting the face stuff...
-	// Because how am I getting the face for each body....
-	//IFaceFrameResult* ppFaces[BODY_COUNT] = {0};
+
 	IBody* ppBodies[BODY_COUNT] = {0};
 
 	// For now let's just assume once face....
@@ -1129,7 +1124,7 @@ HRESULT processFaceFrameData(IFaceFrame* pFaceFrame)
 	{
 		if (bFaceTracked)
 		{
-			
+
 			hr = pFaceFrame->get_FaceFrameResult(&pFaceFrameResult);
 			// tracking id
 			UINT64 iTrackingId = 0;
@@ -1197,7 +1192,10 @@ void FaceReaderThreadLoop(void *arg)
 }
 
 
-
+// Face tracking is a conglometate of/inferred from body data and color data
+	// // But face frame sources have to be constructed
+	// //https://msdn.microsoft.com/en-us/library/microsoft.kinect.face.createfaceframesource.aspx
+	// //https://msdn.microsoft.com/en-us/library/microsoft.kinect.face.ifaceframereader.get_faceframesource.aspx
 NAN_METHOD(OpenFaceReaderFunction)
 {
 
@@ -1212,35 +1210,17 @@ NAN_METHOD(OpenFaceReaderFunction)
 	m_pFaceReaderCallback = new Nan::Callback(info[0].As<Function>());
 
 	HRESULT hr;
-	
-	// // Face tracking is a conglometate of/inferred from body data and color data
-	// // for body tracking, you can get the data as an immediate source from the sensor
-	// // But face frame sources have to be constructed
-	// //https://msdn.microsoft.com/en-us/library/microsoft.kinect.face.createfaceframesource.aspx
-	// //https://msdn.microsoft.com/en-us/library/microsoft.kinect.face.ifaceframereader.get_faceframesource.aspx
-
-	// // QUESTION - DO I NEED TO BE DOING STUFF WITH MULTITREADING.....
 
 	// // Declare the frame sources
 	IColorFrameSource* pColorFrameSource = NULL;
     IBodyFrameSource* pBodyFrameSource = NULL;
-
 	IFaceFrameSource* pFaceFrameSource = nullptr;
 
 	// Set what the face features we want to track are
-	// LOOK UP WHAT THE PIPE | IS IN C++ - binary or?
-	static const DWORD c_FaceFrameFeatures = 
+	// | is a bitwise inclusive OR
+	static const DWORD c_FaceFrameFeatures =
     FaceFrameFeatures::FaceFrameFeatures_BoundingBoxInColorSpace
     | FaceFrameFeatures::FaceFrameFeatures_PointsInColorSpace;
-    // | FaceFrameFeatures::FaceFrameFeatures_RotationOrientation
-    // | FaceFrameFeatures::FaceFrameFeatures_Happy
-    // | FaceFrameFeatures::FaceFrameFeatures_RightEyeClosed
-    // | FaceFrameFeatures::FaceFrameFeatures_LeftEyeClosed
-    // | FaceFrameFeatures::FaceFrameFeatures_MouthOpen
-    // | FaceFrameFeatures::FaceFrameFeatures_MouthMoved
-    // | FaceFrameFeatures::FaceFrameFeatures_LookingAway
-    // | FaceFrameFeatures::FaceFrameFeatures_Glasses
-    // | FaceFrameFeatures::FaceFrameFeatures_FaceEngagement;
     //static const DWORD c_FaceFrameFeatures = 0;
 
 	hr = m_pKinectSensor->get_ColorFrameSource(&pColorFrameSource);
@@ -1262,18 +1242,12 @@ NAN_METHOD(OpenFaceReaderFunction)
     if (SUCCEEDED(hr))
     {
     	std::cout << "hi from std\n";
-    	//cout << "hi!";
-
     	// arguments for creating: (what sensor, initial tracking ID, features to detect, assign to the source)
-    	// run a bunch of consoles on this, so that I can see what each of them are
-    	// compare with consoling from the visual studio code and see if its the same
     	std::cout << c_FaceFrameFeatures;
-    	//hr = CreateFaceFrameSource(m_pKinectSensor, 0, c_FaceFrameFeatures, &pFaceFrameSource);
-    	// THIS IS WHAT I HAD BEFORE....
-		//hr = m_pKinectSensor->get_FaceFrameSource(&pFaceFrameSource);
+    	hr = CreateFaceFrameSource(m_pKinectSensor, 0, c_FaceFrameFeatures, &pFaceFrameSource);
     }
 
-info.GetReturnValue().Set(true);
+	info.GetReturnValue().Set(true);
 	// if (SUCCEEDED(hr))
 	// {
 	// 	// open the face reader on the source
